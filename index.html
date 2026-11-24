@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Live Now">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0e1116">
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'%3E%3Crect width='180' height='180' fill='%230e1116'/%3E%3Ccircle cx='90' cy='90' r='34' fill='%2330d158'/%3E%3C/svg%3E">
+<title>Live Now</title>
+<style>
+:root{--bg:#0e1116;--card:#171c24;--fg:#eef1f5;--dim:#8b95a5;--live:#30d158;--off:#3a424f}
+@media (prefers-color-scheme: light){:root{--bg:#f3f5f8;--card:#fff;--fg:#14181f;--dim:#5d6877;--off:#c3cad4}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.4 -apple-system,system-ui,sans-serif;
+  padding:max(20px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) max(24px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left))}
+h1{font-size:1.3rem;margin:0 0 4px}
+.sub{color:var(--dim);font-size:.85rem;margin-bottom:16px}
+a.card{display:flex;gap:12px;align-items:center;background:var(--card);border-radius:14px;padding:14px;margin-bottom:10px;color:inherit;text-decoration:none}
+.dot{width:14px;height:14px;border-radius:50%;background:var(--off);flex:none}
+.live .dot{background:var(--live);box-shadow:0 0 0 4px rgba(48,209,88,.25)}
+.main{min-width:0;flex:1}
+.name{font-weight:600}
+.info{color:var(--dim);font-size:.85rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tag{font-size:.75rem;font-weight:700;color:var(--live)}
+.x{background:none;border:0;color:var(--dim);font-size:1.3rem;padding:6px}
+form{display:flex;gap:8px;margin-top:16px}
+input{flex:1;min-width:0;padding:12px;border-radius:10px;border:1px solid var(--off);background:var(--card);color:var(--fg);font-size:16px}
+button.add{padding:12px 16px;border:0;border-radius:10px;background:var(--live);color:#000;font-weight:600;font-size:16px}
+.note{color:var(--dim);font-size:.75rem;margin-top:16px}
+</style>
+</head>
+<body>
+<h1>Live Now</h1>
+<div class="sub" id="updated">Checking…</div>
+<div id="list"></div>
+<form id="f"><input id="n" placeholder="Add a Twitch name" autocapitalize="none" autocorrect="off"><button class="add">Add</button></form>
+<div class="note">Twitch only. Checks every minute while this is open. Tap a name to open the stream.</div>
+<script>
+const API = "https://decapi.me/twitch/";
+const DEFAULT = [["kaicenat","Kai Cenat"],["lacy","Lacy"],["dylanpage","Dylan Page"]];
+let streamers;
+try { streamers = JSON.parse(localStorage.getItem("streamers")); } catch (e) {}
+if (!Array.isArray(streamers) || !streamers.length) streamers = DEFAULT.slice();
+const save = () => { try { localStorage.setItem("streamers", JSON.stringify(streamers)); } catch (e) {} };
+const state = {};   // login -> {live, uptime, game, title}
+
+async function txt(path) {
+  const r = await fetch(API + path, {cache: "no-store"});
+  if (!r.ok) throw new Error(r.status);
+  return (await r.text()).trim();
+}
+async function check(login) {
+  try {
+    const up = await txt("uptime/" + encodeURIComponent(login));
+    if (/offline|not found|error/i.test(up)) { state[login] = {live: false}; return; }
+    const prev = state[login] || {};
+    let game = prev.game, title = prev.title;
+    if (!prev.live) { try { game = await txt("game/" + login); title = await txt("title/" + login); } catch (e) {} }
+    state[login] = {live: true, uptime: up, game, title};
+  } catch (e) { state[login] = {live: false, err: true}; }
+}
+function render() {
+  const list = document.getElementById("list");
+  list.textContent = "";
+  const order = streamers.slice().sort((a, b) => (state[b[0]]?.live ? 1 : 0) - (state[a[0]]?.live ? 1 : 0));
+  for (const [login, label] of order) {
+    const s = state[login] || {};
+    const a = document.createElement("a");
+    a.className = "card" + (s.live ? " live" : "");
+    a.href = "https://www.twitch.tv/" + encodeURIComponent(login);
+    a.target = "_blank"; a.rel = "noopener";
+    const dot = Object.assign(document.createElement("span"), {className: "dot"});
+    const main = document.createElement("div"); main.className = "main";
+    const name = Object.assign(document.createElement("div"), {className: "name", textContent: label});
+    const info = document.createElement("div"); info.className = "info";
+    info.textContent = s.live ? [s.game, s.title].filter(Boolean).join(" · ") : (s.err ? "couldn't check" : "offline");
+    main.append(name, info);
+    a.append(dot, main);
+    if (s.live) a.append(Object.assign(document.createElement("div"), {className: "tag", textContent: "LIVE · " + s.uptime.replace(/ minutes?/, "m").replace(/ hours?/, "h").replace(/ seconds?/, "s").replace(/,/g, "")}));
+    const x = Object.assign(document.createElement("button"), {className: "x", textContent: "×", ariaLabel: "Remove " + label});
+    x.onclick = e => { e.preventDefault(); streamers = streamers.filter(t => t[0] !== login); save(); render(); };
+    a.append(x);
+    list.append(a);
+  }
+}
+async function refresh() {
+  await Promise.all(streamers.map(t => check(t[0])));
+  render();
+  const n = streamers.filter(t => state[t[0]]?.live).length;
+  document.getElementById("updated").textContent = n + " live · updated " + new Date().toLocaleTimeString([], {hour: "numeric", minute: "2-digit"});
+}
+document.getElementById("f").onsubmit = e => {
+  e.preventDefault();
+  const v = document.getElementById("n").value.trim().toLowerCase().replace(/^.*twitch\.tv\//, "").replace(/[^a-z0-9_]/g, "");
+  if (v && !streamers.some(t => t[0] === v)) { streamers.push([v, v]); save(); refresh(); }
+  document.getElementById("n").value = "";
+};
+render(); refresh();
+setInterval(() => { if (!document.hidden) refresh(); }, 60000);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(); });
+</script>
+</body>
+</html>
