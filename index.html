@@ -39,10 +39,18 @@ button.add{padding:12px 16px;border:0;border-radius:10px;background:var(--live);
 <div class="note">Twitch only. Checks every minute while this is open. Tap a name to open the stream.</div>
 <script>
 const API = "https://decapi.me/twitch/";
-const DEFAULT = [["kaicenat","Kai Cenat"],["lacy","Lacy"],["dylanpage","Dylan Page"]];
+const DEFAULT = [["kaicenat","Kai Cenat"],["lacy","Lacy"],["dylanpage","Dylan Page"],["yourragegaming","Your Rage Gaming"],["diegoloveless","DiegoLoveless"]];
+const DEFAULT_VERSION = "2";   // bump this when DEFAULT gets new names: devices with a saved list get the new ones added once
 let streamers;
 try { streamers = JSON.parse(localStorage.getItem("streamers")); } catch (e) {}
 if (!Array.isArray(streamers) || !streamers.length) streamers = DEFAULT.slice();
+try {
+  if (localStorage.getItem("defaultsVersion") !== DEFAULT_VERSION) {
+    for (const d of DEFAULT) if (!streamers.some(t => t[0] === d[0])) streamers.push(d.slice());
+    localStorage.setItem("defaultsVersion", DEFAULT_VERSION);
+    localStorage.setItem("streamers", JSON.stringify(streamers));
+  }
+} catch (e) {}
 const save = () => { try { localStorage.setItem("streamers", JSON.stringify(streamers)); } catch (e) {} };
 const state = {};   // login -> {live, uptime, game, title}
 
